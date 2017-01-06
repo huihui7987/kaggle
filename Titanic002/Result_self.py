@@ -33,17 +33,20 @@ def loadtrainDataSet(filename):
     dataSet = pd.read_csv(filename)
 
     #处理年龄缺失值,取平均值，也可以考虑直接去掉
-    m = ma.masked_array(dataSet['Age'],isnan(dataSet['Age']))
-    mean = np.mean(m).astype(int)
-    dataSet['Age'] = dataSet['Age'].map(lambda x: mean if np.isnan(x) else x)
+    #m = ma.masked_array(dataSet['Age'],isnan(dataSet['Age']))
+    #mean = np.mean(m).astype(int)
+    #dataSet['Age'] = dataSet['Age'].map(lambda x: mean if np.isnan(x) else x)
 
-    exc_cols = ['PassengerId', 'Survived', 'Name', 'Ticket', 'Embarked', 'Cabin']
+
+    exc_cols = ['PassengerId', 'Name', 'Ticket', 'Embarked', 'Cabin']
     cols = [c for c in dataSet.columns if c not in exc_cols]
     features = dataSet.ix[:,cols]
+    #直接去掉年龄缺失值
+    features.dropna(inplace=True)
 
-    label = dataSet['Survived'].values
+    label = features['Survived'].values
+    features.drop(['Survived'],axis=1,inplace=True)
     return features,label
-
 
 
 def loadtestDataSet(filename):
@@ -75,7 +78,6 @@ def preProcessToVec(features):
     return pre_X
 
 
-
 def trainDicisionTree(feature,label):
     '''
     :return:
@@ -103,7 +105,7 @@ def DicisionTreePredict(feature,label,newRowX):
 
 
 def saveresult(ids,result):
-    predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submission.csv", "w")
+    predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submi22.csv", "w")
     open_file_object = csv.writer(predictions_file)
     open_file_object.writerow(["PassengerId","Survived"])
     open_file_object.writerows(zip(ids,result))
@@ -121,10 +123,12 @@ def mainDT():
     testfeature,ids = loadtestDataSet(testfilename)
     testfeatureVEC = preProcessToVec(testfeature)
 
+    #trainDicisionTree(trainfeatureVEC, label)
+
 
     res = DicisionTreePredict(trainfeatureVEC,label,testfeatureVEC)
     print(res)
-    #saveresult(ids,res)
+    saveresult(ids,res)
 
     localdd = '/Users/ghuihui/PycharmProjects/kaggle/Titanic002/genderclassmodel.csv'
     localdataSet = pd.read_csv(localdd)
@@ -137,8 +141,5 @@ def mainDT():
             count += 1
     rr = count / len(localvalue)
     print(rr)
-
-
-
 
 mainDT()
