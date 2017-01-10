@@ -38,9 +38,13 @@ def loadtrainDataSet(filename):
     #dataSet['Age'] = dataSet['Age'].map(lambda x: mean if np.isnan(x) else x)
 
 
-    exc_cols = ['PassengerId', 'Name', 'Ticket', 'Embarked', 'Cabin']
+    exc_cols = ['PassengerId', 'Name', 'Ticket','Embarked','Cabin']
     cols = [c for c in dataSet.columns if c not in exc_cols]
     features = dataSet.ix[:,cols]
+    #添加embarked与cabin之后，正确率下降
+    #features.loc[(features.Cabin.notnull()), 'Cabin'] = 1
+    #features.loc[(features.Cabin.isnull()), 'Cabin'] = 0
+    #features.Embarked.fillna('S')
     #直接去掉年龄缺失值
     features.dropna(inplace=True)
 
@@ -59,9 +63,13 @@ def loadtestDataSet(filename):
     meanm = np.mean(mm).astype(int)
     dataSet['Fare'] = dataSet['Fare'].map(lambda x: meanm if np.isnan(x) else x)
 
-    exc_cols = ['PassengerId', 'Name', 'Ticket', 'Embarked', 'Cabin']
+    exc_cols = ['PassengerId', 'Name', 'Ticket','Embarked','Cabin']
     cols = [c for c in dataSet.columns if c not in exc_cols]
     testfeatures = dataSet.ix[:, cols]
+    #testfeatures.loc[(testfeatures.Cabin.notnull()), 'Cabin'] = 1
+    #testfeatures.loc[(testfeatures.Cabin.isnull()), 'Cabin'] = 0
+    #testfeatures.Embarked.fillna('S')
+
     ids = dataSet['PassengerId'].values
 
     return testfeatures,ids
@@ -101,11 +109,12 @@ def DicisionTreePredict(feature,label,newRowX):
     clf = tree.DecisionTreeClassifier(max_depth=5)
     clf = clf.fit(feature,label)
     predictedY = clf.predict(newRowX)
+
     return predictedY
 
 
 def saveresult(ids,result):
-    predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submi22.csv", "w")
+    predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submi33.csv", "w")
     open_file_object = csv.writer(predictions_file)
     open_file_object.writerow(["PassengerId","Survived"])
     open_file_object.writerows(zip(ids,result))
@@ -141,5 +150,7 @@ def mainDT():
             count += 1
     rr = count / len(localvalue)
     print(rr)
+
+    #pd.DataFrame({"columns": list(feature.columns)[:], "coef": list(clf.coef_.T)})
 
 mainDT()
