@@ -115,14 +115,20 @@ train = train.drop(['CategoricalAge', 'CategoricalFare'], axis=1)
 test = test.drop(drop_elements, axis=1)
 
 print(train.head(10))
-
+lab = test.columns.values[0::]
 train = train.values
 test = test.values
-
+print('lab',lab)
+###############################
+########### 训练 ##############
+##############################
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.grid_search import GridSearchCV,RandomizedSearchCV
+from sklearn.metrics import classification_report
 
-from sklearn.model_selection import StratifiedShuffleSplit
+#from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.cross_validation import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -131,6 +137,9 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, Gradien
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
+
+from scipy.stats import uniform as sp_rand
+from scipy.stats import randint as sp_randint
 
 classifiers = [
     KNeighborsClassifier(3),
@@ -147,26 +156,22 @@ classifiers = [
 log_cols = ["Classifier", "Accuracy"]
 log = pd.DataFrame(columns=log_cols)
 
-sss = StratifiedShuffleSplit(n_splits=10, test_size=0.1, random_state=0)
-
 X = train[0::, 1::]
 y = train[0::, 0]
 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=0)
+
 acc_dict = {}
 
-for train_index, test_index in sss.split(X, y):
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-
-    for clf in classifiers:
-        name = clf.__class__.__name__
-        clf.fit(X_train, y_train)
-        train_predictions = clf.predict(X_test)
-        acc = accuracy_score(y_test, train_predictions)
-        if name in acc_dict:
-            acc_dict[name] += acc
-        else:
-            acc_dict[name] = acc
+for clf in classifiers:
+    name = clf.__class__.__name__
+    clf.fit(X_train, y_train)
+    train_predictions = clf.predict(X_test)
+    acc = accuracy_score(y_test, train_predictions)
+    if name in acc_dict:
+        acc_dict[name] += acc
+    else:
+        acc_dict[name] = acc
 
 for clf in acc_dict:
     acc_dict[clf] = acc_dict[clf] / 10.0
@@ -178,17 +183,127 @@ plt.title('Classifier Accuracy')
 
 sns.set_color_codes("muted")
 sns.barplot(x='Accuracy', y='Classifier', data=log, color="b")
+###############################
+########### 预测 ##############
+###############################
 
-candidate_classifier = DecisionTreeClassifier(max_depth=5)
-candidate_classifier.fit(train[0::, 1::], train[0::, 0])
-result = candidate_classifier.predict(test)
+tuned_parameters = {"criterion": ["gini", "entropy"],
+              "min_samples_split": sp_randint(1, 20),
+              "max_depth": sp_randint(1, 20),
+              "min_samples_leaf": sp_randint(1, 20),
+              "max_leaf_nodes": sp_randint(2,20),
+              }
+candidate_classifier = DecisionTreeClassifier()
+n_iter_search = 288
+clf = RandomizedSearchCV(candidate_classifier, \
+        param_distributions=tuned_parameters, \
+        n_iter=n_iter_search, \
+        cv=10)
+
+clf.fit(X_train, y_train)
+
+print("Best parameters set found on development set:")
+print()
+print(clf.best_params_)
+print()
+
+
+dt = DecisionTreeClassifier(max_depth=5)#criterion='entropy', min_samples_split=7, max_leaf_nodes=6, min_samples_leaf=7, max_depth=8)
+dt.fit(X, y)
+result = dt.predict(test)
 
 print(result)
-import csv
-ids = [ids for ids in range(892,1310)]
-#print(ids)
-predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submi99.csv", "w")
-open_file_object = csv.writer(predictions_file)
-open_file_object.writerow(["PassengerId","Survived"])
-open_file_object.writerows(zip(ids,result))
-predictions_file.close()
+
+def featureImportance():
+    feature_importance = dt.feature_importances_
+    print(feature_importance)
+    important_features = lab#.columns.values[0::]
+
+
+    feature_importance = 100.0 * (feature_importance / feature_importance.max())
+
+    # Get the indexes of all features over the importance threshold
+    important_idx = np.where(feature_importance)[0]
+
+    # Get the sorted indexes of important features
+    sorted_idx = np.argsort(feature_importance[important_idx])[::-1]
+    print ("\nFeatures sorted by importance (DESC):\n", important_features[sorted_idx])
+
+    # Adapted from http://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_regression.html
+    pos = np.arange(sorted_idx.shape[0]) + .5
+    plt.subplot(1, 2, 2)
+    plt.barh(pos, feature_importance[important_idx][sorted_idx[::-1]], align='center')
+    plt.yticks(pos, important_features[sorted_idx[::-1]])
+    plt.xlabel('Relative Importance')
+    plt.title('Variable Importance')
+    plt.show()
+
+
+
+# 用sklearn的learning_curve得到training_score和cv_score，使用matplotlib画出learning curve
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1,
+                        train_sizes=np.linspace(.05, 1., 20), verbose=0, plot=True):
+    """
+    画出data在某模型上的learning curve.
+    参数解释
+    ----------
+    estimator : 你用的分类器。
+    title : 表格的标题。
+    X : 输入的feature，numpy类型
+    y : 输入的target vector
+    ylim : tuple格式的(ymin, ymax), 设定图像中纵坐标的最低点和最高点
+    cv : 做cross-validation的时候，数据分成的份数，其中一份作为cv集，其余n-1份作为training(默认为3份)
+    n_jobs : 并行的的任务数(默认1)
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from sklearn.learning_curve import learning_curve
+
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes, verbose=verbose)
+
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+
+    if plot:
+        plt.figure()
+        plt.title(title)
+        if ylim is not None:
+            plt.ylim(*ylim)
+        plt.xlabel(u"训练样本数")
+        plt.ylabel(u"得分")
+        #plt.gca().invert_yaxis()
+        plt.grid()
+
+        plt.fill_between(train_sizes, train_scores_mean - train_scores_std, train_scores_mean + train_scores_std,
+                         alpha=0.1, color="b")
+        plt.fill_between(train_sizes, test_scores_mean - test_scores_std, test_scores_mean + test_scores_std,
+                         alpha=0.1, color="r")
+        plt.plot(train_sizes, train_scores_mean, 'o-', color="b", label=u"训练集上得分")
+        plt.plot(train_sizes, test_scores_mean, 'o-', color="r", label=u"交叉验证集上得分")
+
+        plt.legend(loc="best")
+
+        plt.draw()
+        plt.show()
+        #plt.gca().invert_yaxis()
+
+    midpoint = ((train_scores_mean[-1] + train_scores_std[-1]) + (test_scores_mean[-1] - test_scores_std[-1])) / 2
+    diff = (train_scores_mean[-1] + train_scores_std[-1]) - (test_scores_mean[-1] - test_scores_std[-1])
+    return midpoint, diff
+
+#plot_learning_curve(dt, u"学习曲线", X, y)
+
+
+def saveRsult(result):
+    import csv
+    ids = [ids for ids in range(892, 1310)]
+    # print(ids)
+    predictions_file = open("/Users/ghuihui/PycharmProjects/kaggle/Titanic002/dt_submixxx.csv", "w")
+    open_file_object = csv.writer(predictions_file)
+    open_file_object.writerow(["PassengerId", "Survived"])
+    open_file_object.writerows(zip(ids, result))
+    predictions_file.close()
+
